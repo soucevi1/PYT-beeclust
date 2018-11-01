@@ -38,6 +38,26 @@ class BeeClust:
     def forget():
         # pro kazdou vcelu v bees:
         #    na jeji pozici v mape zapis -1
+        for b in self.bees:
+            self.map[b] = -1
+
+
+    def calculate_heat():
+        # spocitej teplo konkretniho policka
+        pass
+
+
+    def get_cooler_distances(coolers):
+        # coolers - tuple arrayi x a y souradnic
+        # najit vsechny chladice
+        # pro kazdy chladic:
+        #    projit mapu BFS, brat ohled jenom na zdi
+        #    prepisovat vyssi hodnoty mensimi
+        pass
+
+
+    def get_heater_distances(heaters):
+        # heaters - tuple arrayi x a y souradnic
         pass
 
 
@@ -59,6 +79,23 @@ class BeeClust:
         #        pro kazde policko: 
         #            pokud je ohrivacem: spust z nej BFS
         #                                prepisuj vyssi hodnoty (zacina se s +inf)
+        walls = numpy.argwhere(self.map == 5)
+        for w in walls:
+            self.map[tuple(w)] = NaN
+
+        heaters = numpy.argwhere(self.map == 6)
+        heater_distances = get_heater_distances(heaters)
+        for h in heaters:
+            self.map[tuple(h)] = self.T_heater
+
+        coolers = numpy.argwhere(self.map == 7)
+        cooler_distances = get_cooler_distances(coolers)
+        for c in coolers:
+            self.map[tuple(c)] = self.T_cooler
+
+        others = numpy.argwhere(self.map < 5)
+        for o in others:
+            self.map[tuple(o)] = calculate_heat()
 
 
     def get_all_bees():
@@ -71,17 +108,31 @@ class BeeClust:
 
     def get_all_swarms():
         # vytvorit pole, kde vcela == 1, ostatni == 0
-        # lw, num = measurements.label(pole)
-        #    vrati pole, kde jsou 0 (nic) a cisla (oznaceni clusteru)
+        pole = numpy.zeros(self.map.shape, dtype='int')
+        for b in self.bees:
+            pole[b] = 1
+
+        # vrati pole, kde jsou 0 (nic) a cisla (oznaceni clusteru)
+        lw, num = measurements.label(pole)
+
+        sw = [ [] * num ] # list prazdnych listu
+        for n in range(num): # pro kazdy swarm
+            x = numpy.argwhere(lw == n+1) # seznam seznamu
+            for i in x: # pro kazdou souradnici
+                sw[n].append(tuple(i)) # propoj do vysledku
+        return sw
+
         #https://stackoverflow.com/questions/25664682/how-to-find-cluster-sizes-in-2d-numpy-array
-        pass
 
    
     def get_score():
         # pro kazdou vcelu:
         #    pricti jeji teplotu k sume
-        # vydel sumu opctem vcel
-        pass
+        # vydel sumu poctem vcel
+        total = 0
+        for b in self.bees:
+            total += self.heatmap[b]
+        return total/len(bees)
 
 
 b = BeeClust(some_numpy_map)
