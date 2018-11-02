@@ -1,5 +1,4 @@
 import numpy
-#from pylab import *
 from scipy.ndimage import measurements
 import random
 import queue
@@ -30,8 +29,8 @@ class BeeClust:
         self.T_env = T_env
         self.min_wait = min_wait
 
-        self.check_types()
-        self.check_values()
+        self.check_constructor_arg_types()
+        self.check_constructor_arg_values()
 
         self.heatmap = numpy.full((map.shape), self.T_env, dtype=float) #float map
         self.bees = self.get_all_bees() # list of tuples
@@ -40,10 +39,14 @@ class BeeClust:
         self.score = self.get_score()
 
 
-    def check_values(self):
+    def check_constructor_arg_values(self):
+        # Check whether the constructor arguments have correct values
+
+        # Only 2D map is alowed
         if len(self.map.shape) != 2:
             raise ValueError(f'Map shape is must be 2D, is {self.map.shape}')
 
+        # Probability 0 <= p <= 1
         if (self.p_changedir < 0) or (self.p_changedir > 1):
             raise ValueError(f'probability p_changedir must be positive and between 0 and 1, is {self.p_changedir}')
         if (self.p_wall < 0) or (self.p_wall > 1):
@@ -51,6 +54,7 @@ class BeeClust:
         if (self.p_meet < 0) or (self.p_meet > 1):
             raise ValueError(f'probability p_meet must be positive and between 0 and 1, is {self.p_meet}')
 
+        # Positive temperatures and waiting time
         if (self.k_temp < 0):
             raise ValueError(f'k_temp must be positive, is {self.k_temp}')
         if (self.k_stay < 0):
@@ -58,13 +62,15 @@ class BeeClust:
         if (self.min_wait < 0):
             raise ValueError(f'min_wait must be positive, is {self.min_wait}')
 
+        # Environment must be colder than the heater and hotter than the cooler
         if self.T_env > self.T_heater:
             raise ValueError(f'T_heater colder than environment')
         if self.T_env < self.T_cooler:
             raise ValueError(f'T_cooler hotter than environment')
 
 
-    def check_types(self):
+    def check_constructor_arg_types(self):
+        # Check whether the constructor arguments all have correct types
         if type(self.map) is not numpy.ndarray:
             raise TypeError(f'map (type {type(self.map)}) must be numpy array')
         if (type(self.p_changedir) is not float) and (type(self.p_changedir) is not int):
@@ -89,12 +95,7 @@ class BeeClust:
             raise TypeError(f'min_wait (type {type(self.min_wait)}) must be int')
 
     def move_bee(self, bee, direction):
-        # spocitej nove souradnice
-        # kontrola, jestli zed nebo device
-        #    zastaveni (prirazeni -t) nebo otocka (zmena smeru)
-        # kontrola, jestli cizi vcela
-        #    zastaveni, nebo nic
-        # pokud prazdno, pohyb
+        # Move bee in given direction, deal with obstacles
         new_coords = ()
         if direction == CONST_BEE_UP:
             new_coords = (bee[0]-1, bee[1])
@@ -105,10 +106,10 @@ class BeeClust:
         elif direction == CONST_BEE_LEFT:
             new_coords = (bee[0], bee[1]-1)
 
-        print(f'c: {new_coords} dir: {direction}')
         if ((new_coords[0] < 0) or (new_coords[1] < 0) or 
             (new_coords[0] >= self.map.shape[0]) or 
-            (new_coords[1] >= self.map.shape[1])): # out of range
+            (new_coords[1] >= self.map.shape[1])): 
+            # out of range
             should_stop = random.randint(1,100)
             if should_stop <= self.p_wall*100:
                 T_local = self.heatmap[bee]
@@ -123,7 +124,8 @@ class BeeClust:
 
         if ((self.map[new_coords] == CONST_WALL) or 
             (self.map[new_coords] == CONST_HEATER) or
-            (self.map[new_coords] == CONST_COOLER)):  # obstacle
+            (self.map[new_coords] == CONST_COOLER)):  
+            # obstacle in the way
             should_stop = random.randint(1,100)
             if should_stop <= self.p_wall*100:
                 T_local = self.heatmap[bee]
@@ -151,34 +153,30 @@ class BeeClust:
 
 
     def tick(self):
-        # vytvor novy seznam souradnic pro vcely
-        # pro kazdou vcelu ve starem:
-        #    spocitej pst pohybu
-        #    spocitej novou pozici
-        #    kontrola kolize se zdi nebo heaterem, pripadne prepocitani
-        #    prohledej stary a novy seznam, jestli nedojde ke kolizi se vcelou
-        new_bees = [] # list of tuples
+        # Execute one tick of the clock
+        new_bees = []
         moved_bees = 0
         for b in self.bees:
             bee_num = self.map[b]
-            if bee_num < -1: # bee is waiting
+            if bee_num < -1: 
+                # bee is waiting
                 self.map[b] += 1
                 new_bees.append(b) # waiting on the same position
-            elif bee_num == -1: # bee is waiting, but should move now
+            elif bee_num == -1: 
+                # bee was waiting, should move now
                 direction = random.randint(1,4)
-                #print(f'Direction2: {direction} == num {direction == bee_num}')
                 new_coords = self.move_bee(b, direction)
                 new_bees.append(new_coords)
                 if new_coords != b:
                     moved_bees += 1
-            else: # bee is moving
+            else: 
+                # bee is moving
                 change_d = random.randint(1,100)
                 direction = bee_num                
                 if change_d <= self.p_changedir*100:
                     dirs = [1,2,3,4]
                     dirs.remove(direction)
                     direction = (random.sample(dirs, 1))[0] # choose 1 new random direction
-                #print(f'Direction: {direction} == num {direction == bee_num}')
                 new_coords = self.move_bee(b, direction)
                 new_bees.append(new_coords)
                 if new_coords != b:
@@ -188,19 +186,16 @@ class BeeClust:
 
 
     def forget(self):
-        # pro kazdou vcelu v bees:
-        #    na jeji pozici v mape zapis -1
+        # Every bee number is -1
         for b in self.bees:
             self.map[b] = -1
 
 
     def calculate_heat(self, coords, dist_cooler, dist_heater):
-        # spocitej teplo konkretniho policka
-        # coords - tuple x,y
-
+        # Calculate heat of the given map field
         if (numpy.isnan(dist_cooler)) and (numpy.isnan(dist_heater)):
+            # No heater or cooler present
             return self.T_env
-
         if numpy.isnan(dist_cooler):
             dist_cooler = -1
         if numpy.isnan(dist_heater):
@@ -212,9 +207,10 @@ class BeeClust:
 
 
     def adjust_distance_map(self, dmap, dev):
-        # dev - tuple
-        # dmap - numpy array
-        dmap[dev] = 0 # vzdalenost device od sebe sama
+        # Calculate distance of every field from giver heater/cooler
+        # If distance is greater than what is already in the dmap, 
+        #    do not change the value
+        dmap[dev] = 0
         q = queue.Queue()
         q.put(dev)
 
@@ -237,11 +233,8 @@ class BeeClust:
 
 
     def get_device_distances(self, devices):
-        # devices - list dvojprvkovych listu x a y souradnic (coolers nebo heaters)
-        # najit vsechny chladice
-        # pro kazdy chladic:
-        #    projit mapu BFS, brat ohled jenom na zdi
-        #    prepisovat vyssi hodnoty mensimi
+        # Fill the distance map -- map of numbers representing
+        # the distances of the given field to the nearest device
         distance_map = numpy.full(self.map.shape, numpy.NaN)
         for d in devices:
             distance_map = self.adjust_distance_map(distance_map, tuple(d))
@@ -249,20 +242,27 @@ class BeeClust:
 
 
     def recalculate_heat(self):
+        # Recalculate the heatmap -- fill the heatmap with
+        # values corersponding to every field's content
+
+        # Walls have NaN temperature
         walls = numpy.argwhere(self.map == CONST_WALL)
         for w in walls:
             self.heatmap[tuple(w)] = numpy.NaN
 
+        # Heaters have T_heater temperature
         heaters = numpy.argwhere(self.map == CONST_HEATER)
         for h in heaters:
             self.heatmap[tuple(h)] = self.T_heater
         heater_distances = self.get_device_distances(heaters)
 
+        # Coolers have T_cooler temperature
         coolers = numpy.argwhere(self.map == CONST_COOLER)
         for c in coolers:
             self.heatmap[tuple(c)] = self.T_cooler
         cooler_distances = self.get_device_distances(coolers)
 
+        # Other fields' (bees and empty) temperature needs to be calculated
         others = numpy.argwhere(self.map <= CONST_BEE_LEFT)
         for o in others:
             self.heatmap[tuple(o)] = self.calculate_heat(tuple(o), 
@@ -270,7 +270,8 @@ class BeeClust:
 
 
     def get_all_bees(self):
-        l_bees = numpy.argwhere((self.map <= CONST_BEE_LEFT) & (self.map != 0)) # seznam seznamu
+        # Find positions of all the bees in the map
+        l_bees = numpy.argwhere((self.map <= CONST_BEE_LEFT) & (self.map != 0))
         lt_bees = []
         for i in l_bees:
             lt_bees.append(tuple(i))
@@ -278,36 +279,31 @@ class BeeClust:
 
 
     def get_all_swarms(self):
-        # vytvorit pole, kde vcela == 1, ostatni == 0
-        pole = numpy.zeros(self.map.shape, dtype='int')
+        # Find positions of all the bee swarms in the map
+
+        # Make map of 1s (bee opsition) and 0s (other)
+        clusters = numpy.zeros(self.map.shape, dtype='int')
         for b in self.bees:
-            pole[b] = 1
+            clusters[b] = 1
 
-        # vrati pole, kde jsou 0 (nic) a cisla (oznaceni clusteru)
-        lw, num = measurements.label(pole)
+        # Returns map of clusters with 0s (empty) and cluster numbers
+        swarm_map, swarm_cnt = measurements.label(clusters)
 
-        sw = [] # list prazdnych listu
-        for n in range(num): # pro kazdy swarm
-            x = numpy.argwhere(lw == n+1) # seznam seznamu
+        swarms = []
+        for n in range(swarm_cnt):
+            swarm_coords = numpy.argwhere(swarm_map == n+1)
             l = []
-            for i in x: # pro kazdou souradnici
-                l.append(tuple(i)) # pripoj do vysledku
-            sw.append(l)
-        return sw
+            for s in swarm_coords:
+                l.append(tuple(s))
+            swarms.append(l)
+        return swarms
 
-        #https://stackoverflow.com/questions/25664682/how-to-find-cluster-sizes-in-2d-numpy-array
 
-   
     def get_score(self):
-        # pro kazdou vcelu:
-        #    pricti jeji teplotu k sume
-        # vydel sumu poctem vcel
+        # Find average temperature of all the bees
         total = 0
         if len(self.bees) == 0:
             return 0
         for b in self.bees:
             total += self.heatmap[b]
         return total/len(self.bees)
-
-
-#b = BeeClust(some_numpy_map)
