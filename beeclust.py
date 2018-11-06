@@ -182,6 +182,8 @@ class BeeClust:
                 if new_coords != b:
                     moved_bees += 1
         self.bees = new_bees
+        self.swarms = self.get_all_swarms()
+        self.score = self.get_score()
         return moved_bees
 
 
