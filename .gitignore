@@ -1,3 +1,6 @@
 __venv__
 tests
 __pycache__
+*.so
+*.html
+build

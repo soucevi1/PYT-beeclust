@@ -1,21 +1,43 @@
 import numpy
+cimport numpy
 from scipy.ndimage import measurements
 import random
 import queue
 
-CONST_EMPTY = 0
-CONST_BEE_UP = 1
-CONST_BEE_RIGHT = 2
-CONST_BEE_DOWN = 3
-CONST_BEE_LEFT = 4
-CONST_WALL = 5
-CONST_HEATER = 6
-CONST_COOLER = 7
+cdef int CONST_EMPTY = 0
+cdef int CONST_BEE_UP = 1
+cdef int CONST_BEE_RIGHT = 2
+cdef int CONST_BEE_DOWN = 3
+cdef int CONST_BEE_LEFT = 4
+cdef int CONST_WALL = 5
+cdef int CONST_HEATER = 6
+cdef int CONST_COOLER = 7
 
-class BeeClust:
 
-    def __init__(self, map, p_changedir=0.2, p_wall=0.8, p_meet=0.8, k_temp=0.9,
-                 k_stay=50, T_ideal=35, T_heater=40, T_cooler=5, T_env=22, min_wait=2):
+cdef class BeeClust:
+
+    #cdef numpy.ndarray[numpy.int64_t, ndim=2] map
+    cdef numpy.ndarray map
+    cdef float p_changedir
+    cdef float p_wall
+    cdef float p_meet
+    cdef float k_temp
+    cdef int k_stay
+    cdef int T_ideal
+    cdef int T_heater
+    cdef int T_cooler
+    cdef int T_env
+    cdef int min_wait
+    #cdef numpy.ndarray[numpy.float, ndim=2] heatmap
+    cdef numpy.ndarray heatmap
+    cdef list bees
+    cdef list swarms
+    cdef float score
+
+    def __cinit__(self, numpy.ndarray[numpy.long, ndim=2] map, 
+                 float p_changedir=0.2, float p_wall=0.8, float p_meet=0.8, 
+                 float k_temp=0.9, int k_stay=50, int T_ideal=35, int T_heater=40, 
+                 int T_cooler=5, int T_env=22, int min_wait=2):
 
         self.map = map
         self.p_changedir = p_changedir
@@ -32,19 +54,19 @@ class BeeClust:
         self.check_constructor_arg_types()
         self.check_constructor_arg_values()
 
-        self.heatmap = numpy.full((map.shape), self.T_env, dtype=float) #float map
+        self.heatmap = numpy.full((map.shape[0], map.shape[1]), self.T_env, dtype=float) #float map
         self.bees = self.get_all_bees() # list of tuples
         self.swarms = self.get_all_swarms() # list of list of tuples
         self.recalculate_heat()
         self.score = self.get_score()
 
 
-    def check_constructor_arg_values(self):
+    cpdef void check_constructor_arg_values(self):
         # Check whether the constructor arguments have correct values
 
         # Only 2D map is alowed
-        if len(self.map.shape) != 2:
-            raise ValueError(f'Map shape is must be 2D, is {self.map.shape}')
+        if self.map.ndim != 2:
+            raise ValueError(f'Map shape is must be 2D, is {self.map.ndim}')
 
         # Probability 0 <= p <= 1
         if (self.p_changedir < 0) or (self.p_changedir > 1):
@@ -69,7 +91,7 @@ class BeeClust:
             raise ValueError(f'T_cooler hotter than environment')
 
 
-    def check_constructor_arg_types(self):
+    cpdef void check_constructor_arg_types(self):
         # Check whether the constructor arguments all have correct types
         if type(self.map) is not numpy.ndarray:
             raise TypeError(f'map (type {type(self.map)}) must be numpy array')
@@ -165,10 +187,11 @@ class BeeClust:
             elif bee_num == -1: 
                 # bee was waiting, should move now
                 direction = random.randint(1,4)
-                new_coords = self.move_bee(b, direction)
-                new_bees.append(new_coords)
-                if new_coords != b:
-                    moved_bees += 1
+                #new_coords = self.move_bee(b, direction)
+                self.map[b] = direction
+                new_bees.append(b)
+                #if new_coords != b:
+                #    moved_bees += 1
             else: 
                 # bee is moving
                 change_d = random.randint(1,100)
@@ -237,7 +260,7 @@ class BeeClust:
     def get_device_distances(self, devices):
         # Fill the distance map -- map of numbers representing
         # the distances of the given field to the nearest device
-        distance_map = numpy.full(self.map.shape, numpy.NaN)
+        distance_map = numpy.full((self.map.shape[0], self.map.shape[1]), numpy.NaN)
         for d in devices:
             distance_map = self.adjust_distance_map(distance_map, tuple(d))
         return distance_map
@@ -280,11 +303,14 @@ class BeeClust:
         return lt_bees
 
 
-    def get_all_swarms(self):
+    cpdef get_all_swarms(self):
         # Find positions of all the bee swarms in the map
-
+        cpdef numpy.ndarray[numpy.long, ndim=2] clusters, swarm_map
+        cpdef tuple b
+        cpdef int swarm_cnt, n
+        cpdef list swarm_coords, l, s, swarms
         # Make map of 1s (bee opsition) and 0s (other)
-        clusters = numpy.zeros(self.map.shape, dtype='int')
+        clusters = numpy.zeros((self.map.shape[0], self.map.shape[1]), dtype='int')
         for b in self.bees:
             clusters[b] = 1
 
