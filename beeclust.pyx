@@ -1,10 +1,9 @@
-# cython: boundscheck=False, wraparound=False, nonecheck=False, cdivision=True
-
 import numpy
 cimport numpy
 from scipy.ndimage import measurements
 import random
 import queue
+cimport cython
 
 
 cdef int CONST_EMPTY = 0
@@ -35,7 +34,7 @@ cdef class BeeClust:
     cpdef int min_wait
     #cdef numpy.ndarray[numpy.float, ndim=2] heatmap
     cpdef public numpy.ndarray heatmap
-    cpdef public list bees
+    cpdef public numpy.ndarray bees
     cpdef public list swarms
     cpdef public numpy.float64_t score
 
@@ -68,7 +67,7 @@ cdef class BeeClust:
 
 
         self.heatmap = numpy.full((map.shape[0], map.shape[1]), self.T_env, dtype=numpy.float64) #float map
-        self.bees = self.get_all_bees() # list of tuples
+        self.bees = self.get_all_bees() # no array of arrays
         self.swarms = self.get_all_swarms() # list of list of tuples
         self.recalculate_heat()
         self.score = self.get_score()
@@ -131,9 +130,17 @@ cdef class BeeClust:
         if type(min_wait) is not int:
             raise TypeError(f'min_wait (type {type(self.min_wait)}) must be int')
 
-    def move_bee(self, bee, direction):
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    @cython.cdivision(True)
+    cdef numpy.ndarray[numpy.int64_t, ndim=1] move_bee(self, numpy.ndarray[numpy.int64_t, ndim=1] bee, int direction):
         # Move bee in given direction, deal with obstacles
-        new_coords = ()
+        cdef numpy.ndarray[numpy.int64_t, ndim=1] new_coords 
+        cdef int should_stop, t, d
+        cdef numpy.float64_t T_local
+        new_coords = numpy.ndarray(2)
         if direction == CONST_BEE_UP:
             new_coords = (bee[0]-1, bee[1])
         elif direction == CONST_BEE_RIGHT:
@@ -151,12 +158,12 @@ cdef class BeeClust:
             if should_stop <= self.p_wall*100:
                 T_local = self.heatmap[bee]
                 t = int(self.k_stay / (1 + abs(self.T_ideal - T_local))) # time to wait
-                self.map[bee] = -max(t, self.min_wait)
+                self.map[bee[0], bee[1]] = -max(t, self.min_wait)
             else:
                 d = direction + 2 # 180 degree turn
                 if d > 4:
                     d -= 4
-                self.map[bee] = d
+                self.map[bee[0],bee[1]] = d
             return bee
 
         if ((self.map[new_coords] == CONST_WALL) or 
@@ -165,32 +172,41 @@ cdef class BeeClust:
             # obstacle in the way
             should_stop = random.randint(1,100)
             if should_stop <= self.p_wall*100:
-                T_local = self.heatmap[bee]
+                T_local = self.heatmap[bee[0],bee[1]]
                 t = int(self.k_stay / (1 + abs(self.T_ideal - T_local))) # time to wait
-                self.map[bee] = -max(t, self.min_wait)
+                self.map[bee[0],bee[1]] = -max(t, self.min_wait)
             else:
                 d = direction + 2 # 180 degree turn
                 if d > 4:
                     d -= 4
-                self.map[bee] = d
+                self.map[bee[0],bee[1]] = d
             return bee
 
-        if (self.map[new_coords] <= CONST_BEE_LEFT) and (self.map[new_coords] != 0): #  another bee in the way
+        if (self.map[new_coords] <= CONST_BEE_LEFT) and (self.map[new_coords[0], new_coords[1]] != 0): #  another bee in the way
             should_stop = random.randint(1,100)
             if should_stop <= self.p_meet *100:
                 T_local = self.heatmap[bee]
                 t = int(self.k_stay / (1 + abs(self.T_ideal - T_local))) # time to wait
-                self.map[bee] = -max(t, self.min_wait)
+                self.map[bee[0],bee[1]] = -max(t, self.min_wait)
             return bee
 
         # move the bee
-        self.map[new_coords] = direction
-        self.map[bee] = 0
+        self.map[new_coords[0],new_coords[1]] = direction
+        self.map[bee[0],bee[1]] = 0
         return new_coords
 
 
-    cpdef tick(self):
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    @cython.cdivision(True)
+    cpdef int tick(self):
         # Execute one tick of the clock
+        cdef list new_bees, dirs
+        cdef int moved_bees, bee_num, direction, change_d
+        cdef tuple b, new_coords
+
+
         new_bees = []
         moved_bees = 0
         for b in self.bees:
@@ -225,13 +241,22 @@ cdef class BeeClust:
         return moved_bees
 
 
-    def forget(self):
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    @cython.cdivision(True)
+    cpdef void forget(self):
         # Every bee number is -1
+        cdef tuple b
         for b in self.bees:
             self.map[b] = -1
 
 
-    cpdef numpy.float64_t calculate_heat(self, tuple coords, numpy.int64_t dist_cooler, 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    @cython.cdivision(True)
+    cdef numpy.float64_t calculate_heat(self, tuple coords, numpy.int64_t dist_cooler, 
                                          numpy.int64_t dist_heater):
         # Calculate heat of the given map field
         cdef numpy.float64_t cooling, heating, temp, dc, dh
@@ -254,7 +279,11 @@ cdef class BeeClust:
         return temp
 
 
-    cpdef numpy.ndarray[numpy.int64_t, ndim=2] adjust_distance_map(self,
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    @cython.cdivision(True)
+    cdef numpy.ndarray[numpy.int64_t, ndim=2] adjust_distance_map(self,
             numpy.ndarray[numpy.int64_t, ndim=2] dmap, tuple dev):
         # Calculate distance of every field from giver heater/cooler
         # If distance is greater than what is already in the dmap, 
@@ -286,7 +315,11 @@ cdef class BeeClust:
         return dmap
 
 
-    cpdef numpy.ndarray[numpy.int64_t, ndim=2] get_device_distances(self, 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    @cython.cdivision(True)
+    cdef numpy.ndarray[numpy.int64_t, ndim=2] get_device_distances(self, 
                                                                     numpy.ndarray[numpy.int64_t, ndim=2] devices):
         # Fill the distance map -- map of numbers representing
         # the distances of the given field to the nearest device
@@ -298,6 +331,10 @@ cdef class BeeClust:
         return distance_map
 
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    @cython.cdivision(True)
     cpdef void recalculate_heat(self):
         # Recalculate the heatmap -- fill the heatmap with
         # values corersponding to every field's content
@@ -330,15 +367,25 @@ cdef class BeeClust:
         print(self.heatmap)
 
 
-    def get_all_bees(self):
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    @cython.cdivision(True)
+    cpdef list get_all_bees(self):
         # Find positions of all the bees in the map
+        cdef numpy.ndarray[numpy.int64_t, ndim=2] l_bees
+        cdef list lt_bees
+        cdef numpy.ndarray[numpy.int64_t, ndim=1] i
         l_bees = numpy.argwhere((self.map <= CONST_BEE_LEFT) & (self.map != 0))
         lt_bees = []
         for i in l_bees:
             lt_bees.append(tuple(i))
         return lt_bees
 
-
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    @cython.cdivision(True)
     cpdef get_all_swarms(self):
         # Find positions of all the bee swarms in the map
         cdef numpy.ndarray[int, ndim=2] swarm_map
@@ -364,7 +411,10 @@ cdef class BeeClust:
             swarms.append(l)
         return swarms
 
-
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    @cython.cdivision(True)
     cpdef numpy.float64_t get_score(self):
         # Find average temperature of all the bees
         cdef numpy.float64_t total, l
